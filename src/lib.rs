@@ -7,8 +7,8 @@ use winit::{
     window::Window,
 };
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+//#[cfg(target_arch = "wasm32")]
+//use wasm_bindgen::prelude::*;
 
 mod texture;
 
@@ -242,8 +242,8 @@ impl<'a> State<'a> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
+            //#[cfg(target_arch = "wasm32")]
+            //backends: wgpu::Backends::GL,
             ..Default::default()
         });
 
@@ -477,7 +477,7 @@ impl<'a> State<'a> {
     }
 
     pub fn window(&self) -> &Window {
-        &self.window
+        self.window
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
