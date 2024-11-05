@@ -6,7 +6,7 @@ pub struct World {
 impl World {
     pub fn new(width: f32, height: f32) -> Self {
         Self {
-            height_map: create_gaussian(width, height, 100., 100.),
+            height_map: create_gaussian(width, height, 300., 300.),
         }
     }
 }

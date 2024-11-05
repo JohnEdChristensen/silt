@@ -72,7 +72,10 @@ async fn run() {
 
     let world = World::default();
     let (verts, indices) = world.height_map.create_triangles();
+    println!("{},{}", verts.len(), indices.len());
+
     state.update_verts(&verts, &indices);
+
     let mut surface_configured = false;
 
     event_loop

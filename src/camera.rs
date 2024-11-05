@@ -16,7 +16,7 @@ pub struct Camera {
 impl Camera {
     pub fn new(width: f32, height: f32) -> Self {
         Camera {
-            eye: (0.0, 100.0, 100.0).into(),
+            eye: (0.0, 500.0, 500.0).into(),
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
             aspect: width / height,
@@ -70,6 +70,8 @@ pub struct CameraController {
     is_backward_pressed: bool,
     is_left_pressed: bool,
     is_right_pressed: bool,
+    is_out_pressed: bool,
+    is_in_pressed: bool,
 }
 
 impl CameraController {
@@ -82,6 +84,8 @@ impl CameraController {
             is_backward_pressed: false,
             is_left_pressed: false,
             is_right_pressed: false,
+            is_in_pressed: false,
+            is_out_pressed: false,
         }
     }
 
@@ -122,6 +126,14 @@ impl CameraController {
                         self.is_right_pressed = is_pressed;
                         true
                     }
+                    KeyCode::KeyR => {
+                        self.is_in_pressed = is_pressed;
+                        true
+                    }
+                    KeyCode::KeyF => {
+                        self.is_out_pressed = is_pressed;
+                        true
+                    }
                     _ => false,
                 }
             }
@@ -158,6 +170,14 @@ impl CameraController {
         }
         if self.is_left_pressed {
             camera.eye = camera.target - (forward - right * self.speed).normalize() * forward_mag;
+        }
+        if self.is_out_pressed {
+            camera.eye =
+                camera.target - (forward + camera.up * self.speed).normalize() * forward_mag;
+        }
+        if self.is_in_pressed {
+            camera.eye =
+                camera.target - (forward - camera.up * self.speed).normalize() * forward_mag;
         }
     }
 }

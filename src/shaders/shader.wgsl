@@ -41,7 +41,7 @@ var s_diffuse: sampler;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //return textureSample(t_diffuse, s_diffuse, in.tex_coords) * in.light;
     //return  vec4<f32>(0.8, 0.8, 0.8, 1.0) * (in.light + 0.1);
-    var l = dot(in.light, vec3<f32>(0.56, 0.56, 0.56));
-    var c = vec3<f32>(0.8, 0.6, 0.8) * l;
+    var l = dot(normalize(in.light), vec3<f32>(0.56, 0.56, 0.56));
+    var c = vec3<f32>(0.6, 0.8, 0.6) * (0.1 + max(0.0, l));
     return  vec4<f32>(c, 1.0);
 }
