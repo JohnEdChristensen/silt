@@ -8,13 +8,15 @@ use winit::{event::*, window::Window};
 //use wasm_bindgen::prelude::*;
 
 mod camera;
+pub mod height_map;
 mod texture;
+pub mod world;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
 }
 
 impl Vertex {
@@ -39,31 +41,6 @@ impl Vertex {
     }
 }
 
-const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        tex_coords: [0.4131759, 0.00759614],
-    }, // A
-    Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        tex_coords: [0.0048659444, 0.43041354],
-    }, // B
-    Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        tex_coords: [0.28081453, 0.949397],
-    }, // C
-    Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        tex_coords: [0.85967, 0.84732914],
-    }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        tex_coords: [0.9414737, 0.2652641],
-    }, // E
-];
-
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, /* padding */ 0];
-
 pub struct State<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
@@ -71,8 +48,8 @@ pub struct State<'a> {
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
     num_indices: u32,
     #[allow(dead_code)]
     diffuse_texture: texture::Texture,
@@ -144,7 +121,7 @@ impl<'a> State<'a> {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode: wgpu::PresentMode::AutoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -290,15 +267,15 @@ impl<'a> State<'a> {
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
+            contents: &[0; 50000], //bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage: wgpu::BufferUsages::INDEX,
+            contents: &[0; 50000], //bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
         });
-        let num_indices = INDICES.len() as u32;
+        let num_indices = 0; //INDICES.len() as u32;
 
         Self {
             surface,
@@ -338,6 +315,15 @@ impl<'a> State<'a> {
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         self.camera_controller.process_events(event)
+    }
+
+    pub fn update_verts(&mut self, verts: &[Vertex], indices: &[u16]) {
+        self.queue
+            .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(verts));
+
+        self.queue
+            .write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(indices));
+        self.num_indices = indices.len() as u32;
     }
 
     pub fn update(&mut self) {
