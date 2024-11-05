@@ -1,4 +1,4 @@
-use tutorial6_uniforms::{world::World, State};
+use wgpu_boiler::{world::World, State};
 use winit::{
     event::*,
     event_loop::EventLoop,

@@ -6,13 +6,13 @@ pub struct World {
 impl World {
     pub fn new(width: f32, height: f32) -> Self {
         Self {
-            height_map: create_gaussian(width, height, 10., 20.),
+            height_map: create_gaussian(width, height, 100., 100.),
         }
     }
 }
 
 impl Default for World {
     fn default() -> Self {
-        Self::new(100., 100.)
+        Self::new(2000., 2000.)
     }
 }

@@ -16,6 +16,7 @@ pub mod world;
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pub position: [f32; 3],
+    pub normal: [f32; 3],
     pub tex_coords: [f32; 2],
 }
 
@@ -34,6 +35,11 @@ impl Vertex {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
+                    shader_location: 2,
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],
@@ -170,7 +176,7 @@ impl<'a> State<'a> {
         });
 
         let camera = Camera::new(config.width as f32, config.height as f32);
-        let camera_controller = CameraController::new(0.2);
+        let camera_controller = CameraController::new(5.0);
 
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);
@@ -267,12 +273,12 @@ impl<'a> State<'a> {
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: &[0; 50000], //bytemuck::cast_slice(VERTICES),
+            contents: &[0; 5000000], //bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: &[0; 50000], //bytemuck::cast_slice(INDICES),
+            contents: &[0; 5000000], //bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
         });
         let num_indices = 0; //INDICES.len() as u32;

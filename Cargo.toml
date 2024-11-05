@@ -1,8 +1,8 @@
 [package]
-name = "tutorial6-uniforms"
+name = "wgpu_boiler"
 version = "0.1.0"
-authors = ["Ben Hansen <https://github.com/sotrh>"]
-edition = "2018"
+authors = ["John Christensen"]
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
