@@ -71,11 +71,13 @@ async fn run() {
     let mut state = State::new(&window).await;
 
     let world = World::default();
-    let (verts, indices) = world.height_map.create_triangles();
-    println!("{},{}", verts.len(), indices.len());
+    let (hv, hi) = world.height_map.create_triangles();
+    let (gv, gi) = world.ground_plane.create_triangles();
+    let gi_offset = gi.iter().map(|i| i + hi.len() as u16).collect();
+    let verts = [hv, gv].concat();
+    let indices = [hi, gi_offset].concat();
 
     state.update_verts(&verts, &indices);
-
     let mut surface_configured = false;
 
     event_loop
