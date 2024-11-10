@@ -286,12 +286,12 @@ impl<'a> State<'a> {
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: &[0; 500000], //bytemuck::cast_slice(VERTICES),
+            contents: &[0; 5000000], //bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: &[0; 500000], //bytemuck::cast_slice(INDICES),
+            contents: &[0; 5000000], //bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
         });
         let num_indices = 0; //INDICES.len() as u32;

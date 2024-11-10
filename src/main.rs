@@ -1,4 +1,4 @@
-use wgpu_boiler::{world::World, State};
+use silt::{world::World, State};
 use winit::{
     event::*,
     event_loop::EventLoop,
