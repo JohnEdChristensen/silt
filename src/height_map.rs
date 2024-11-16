@@ -1,3 +1,4 @@
+use egui::Context;
 use glam::{Vec2, Vec3, Vec3Swizzles};
 use itertools::Itertools;
 use noise::{utils::*, Fbm, Perlin};
@@ -13,23 +14,47 @@ pub struct Resolution {
 pub type Point = Vec3;
 pub struct HeightMap {
     resolution: Resolution,
+    map_offset: Vec2,
+    map_scale: Vec3,
     /// 1-1-1 to start
     scale: Vec3,
-    points: Vec<Vec<f32>>,
-}
-
-fn gaussian(x: f32, y: f32, a: f32, b: f32) -> f32 {
-    a * (-(((x * x) / (2. * b * b)) + (y * y) / (2. * b * b))).exp()
+    /// points in the range x,y,z: 0.0-1.0
+    normalized_points: Vec<Vec<f32>>,
+    /// flag to determine if the vertex/index buffer needs to be updated
+    pub dirty_points: bool,
 }
 
 impl HeightMap {
-    pub fn create_triangles(&self) -> (Vec<Vertex>, Vec<u16>) {
-        let pos: Vec<_> = self.points.clone().into_iter().flatten().collect();
+    pub fn new(
+        map_offset: Vec2,
+        map_scale: Vec3,
+        model_scale: Vec3,
+        resolution: Resolution,
+    ) -> Self {
+        let normalized_points = HeightMap::map_gen(&resolution, &map_scale, &map_offset);
+        Self {
+            resolution,
+            map_offset,
+            map_scale,
+            scale: model_scale.xzy(),
+            normalized_points,
+            dirty_points: true,
+        }
+    }
+    pub fn create_triangles(&mut self) -> (Vec<Vertex>, Vec<u32>) {
+        assert!(self.dirty_points, "Unecessary creation of triangles!");
+        self.normalized_points =
+            HeightMap::map_gen(&self.resolution, &self.map_scale, &self.map_offset);
 
-        dbg!(self.points.len());
-        dbg!(self.points[0].len());
+        let pos: Vec<_> = self
+            .normalized_points
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect();
+
         let verts: Vec<_> = self
-            .points
+            .normalized_points
             .clone()
             .into_iter()
             .enumerate()
@@ -46,12 +71,6 @@ impl HeightMap {
                         let i2 = i + 1 + j * x_count;
                         let i3 = i + 1 + (j + 1) * x_count;
                         let i4 = i + (j + 1) * x_count;
-                        dbg!(i);
-                        dbg!(j);
-                        dbg!(i1);
-                        dbg!(i2);
-                        dbg!(i3);
-                        dbg!(i4);
                         let x = (i as f32 / x_count as f32) - 0.5;
                         let y = (j as f32 / x_count as f32) - 0.5;
                         let xn = ((i + 1) as f32 / x_count as f32) - 0.5;
@@ -94,71 +113,80 @@ impl HeightMap {
                     .collect::<Vec<_>>()
             })
             .collect();
-        let indices: Vec<_> = (0..verts.len()).map(|i| i as u16).collect();
+        let indices: Vec<_> = (0..verts.len()).map(|i| i as u32).collect();
         (verts, indices)
     }
-}
 
-pub fn map_gen(
-    resolution: Resolution,
-    model_scale: Vec3,
-    map_scale: Vec3,
-    map_offset: Vec2,
-) -> HeightMap {
-    let map_left = 0.0 + map_offset.x as f64;
-    let map_top = 0.0 + map_offset.y as f64;
-    let map_right = (1.0 * map_scale.x + map_offset.x) as f64;
-    let map_bottom = (1.0 * map_scale.y + map_offset.y) as f64;
+    pub fn gui(&mut self, ui: &Context) {
+        egui::Window::new("")
+            // .vscroll(true)
+            .default_open(false)
+            .max_width(1000.0)
+            .max_height(800.0)
+            .default_width(800.0)
+            .resizable(false)
+            .show(ui, |ui| {
+                if ui.add(egui::Button::new("Click me")).clicked() {
+                    self.scale *= 1.1;
+                    self.dirty_points = true;
+                    println!("PRESSED")
+                }
 
-    let fbm = Fbm::<Perlin>::default();
-    let points = PlaneMapBuilder::new(fbm)
-        .set_size(resolution.x, resolution.y)
-        .set_x_bounds(map_left, map_right)
-        .set_y_bounds(map_top, map_bottom)
-        .build()
-        .into_iter()
-        .map(|v| v as f32)
-        .chunks(resolution.x)
-        .into_iter()
-        .map(|c| c.collect())
-        .collect();
+                if ui
+                    .add(egui::Slider::new(&mut self.scale.x, 0.0..=10000.0).text("h size"))
+                    .changed()
+                {
+                    self.scale.z = self.scale.x;
+                    self.dirty_points = true;
+                }
+                if ui
+                    .add(egui::Slider::new(&mut self.scale.y, 0.0..=1000.0).text("v size"))
+                    .changed()
+                {
+                    self.dirty_points = true;
+                }
+                if ui
+                    .add(egui::Slider::new(&mut self.map_offset.x, -1.0..=1.0).text("map_x"))
+                    .changed()
+                {
+                    self.dirty_points = true;
+                }
+                if ui
+                    .add(egui::Slider::new(&mut self.map_offset.y, -1.0..=1.0).text("map_y"))
+                    .changed()
+                {
+                    self.dirty_points = true;
+                }
+                if ui
+                    .add(egui::Slider::new(&mut self.resolution.x, 2..=400).text("map_y"))
+                    .changed()
+                {
+                    self.resolution.y = self.resolution.x;
+                    self.dirty_points = true;
+                }
+            });
+    }
 
-    HeightMap {
-        points,
-        resolution,
-        scale: model_scale.xzy(),
+    pub fn map_gen(resolution: &Resolution, map_scale: &Vec3, map_offset: &Vec2) -> Vec<Vec<f32>> {
+        let map_left = 0.0 + map_offset.x as f64;
+        let map_top = 0.0 + map_offset.y as f64;
+        let map_right = (1.0 * map_scale.x + map_offset.x) as f64;
+        let map_bottom = (1.0 * map_scale.y + map_offset.y) as f64;
+
+        let fbm = Fbm::<Perlin>::default();
+        PlaneMapBuilder::new(fbm)
+            .set_size(resolution.x, resolution.y)
+            .set_x_bounds(map_left, map_right)
+            .set_y_bounds(map_top, map_bottom)
+            .build()
+            .into_iter()
+            .map(|v| v as f32)
+            .chunks(resolution.x)
+            .into_iter()
+            .map(|c| c.collect())
+            .collect()
     }
 }
-pub fn create_gaussian(
-    resolution: Resolution,
-    scale: Vec3,
-    a: f32,
-    b: f32,
-    z_offset: f32,
-) -> HeightMap {
-    let mut h_map = vec![vec![0.0; resolution.x]; resolution.y];
-
-    let z_step = a / resolution.z as f32;
-
-    for (i, row) in h_map.iter_mut().enumerate() {
-        for (j, val) in row.iter_mut().enumerate() {
-            //normalized between 0 and 1
-            let x = i as f32 / resolution.x as f32;
-            let y = j as f32 / resolution.y as f32;
-
-            let z = gaussian(x, y, a, b);
-            let z_steps = (z / z_step).floor() * z_step;
-
-            *val = z_steps + z_offset;
-        }
-    }
-    HeightMap {
-        resolution,
-        scale,
-        points: h_map,
-    }
-}
-
 fn make_verts(p1: Vec3, p2: Vec3, p3: Vec3) -> Vec<Vertex> {
     let normal = (p2 - p1).cross(p3 - p1).normalize().into();
     vec![
@@ -194,3 +222,4 @@ fn make_verts(p1: Vec3, p2: Vec3, p3: Vec3) -> Vec<Vertex> {
 //        .collect()
 //    })
 //    .collect()
+//

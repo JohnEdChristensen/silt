@@ -1,6 +1,8 @@
 use anyhow::*;
 use image::GenericImageView;
 
+use egui_wgpu::wgpu;
+
 pub struct Texture {
     #[allow(unused)]
     pub texture: wgpu::Texture,

@@ -1,17 +1,26 @@
 use std::iter;
 
-use camera::{Camera, CameraController, CameraUniform};
-use wgpu::util::DeviceExt;
-use winit::{event::*, window::Window};
+//use wgpu::util::DeviceExt;
+//use winit::{event::*, window::Window};
+
+use egui_wgpu::wgpu::util::DeviceExt;
+use egui_wgpu::wgpu::TextureView;
+use egui_wgpu::wgpu::{self, CommandEncoder};
+use egui_wgpu::ScreenDescriptor;
+use egui_winit::winit;
+use egui_winit::winit::{event::*, window::Window};
+use gui::EguiRenderer;
 
 //#[cfg(target_arch = "wasm32")]
 //use wasm_bindgen::prelude::*;
 
+use camera::{Camera, CameraController, CameraUniform};
+use world::World;
 mod camera;
+pub mod gui;
 pub mod height_map;
 mod texture;
 pub mod world;
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
@@ -47,7 +56,7 @@ impl Vertex {
     }
 }
 
-pub struct State<'a> {
+pub struct WgpuState<'a> {
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -70,11 +79,15 @@ pub struct State<'a> {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
 
-    window: &'a Window,
+    pub world: World,
+
+    pub egui: EguiRenderer,
+
+    pub window: &'a Window,
 }
 
-impl<'a> State<'a> {
-    pub async fn new(window: &'a Window) -> State<'a> {
+impl<'a> WgpuState<'a> {
+    pub async fn new(window: &'a Window, world: World) -> WgpuState<'a> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -109,7 +122,7 @@ impl<'a> State<'a> {
                     } else {
                         wgpu::Limits::default()
                     },
-                    memory_hints: Default::default(),
+                    //memory_hints: Default::default(),
                 },
                 None, // Trace path
             )
@@ -237,7 +250,7 @@ impl<'a> State<'a> {
                 module: &shader,
                 entry_point: "vs_main",
                 buffers: &[Vertex::desc()],
-                compilation_options: Default::default(),
+                //compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -250,7 +263,7 @@ impl<'a> State<'a> {
                     }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
-                compilation_options: Default::default(),
+                //compilation_options: Default::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -281,20 +294,28 @@ impl<'a> State<'a> {
             // indicates how many array layers the attachments will have.
             multiview: None,
             // Useful for optimizing shader compilation on Android
-            cache: None,
+            //cache: None,
         });
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: &[0; 5000000], //bytemuck::cast_slice(VERTICES),
+            contents: &[0; 268_435_456], //bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: &[0; 5000000], //bytemuck::cast_slice(INDICES),
+            contents: &[0; 268_435_456], //bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
         });
         let num_indices = 0; //INDICES.len() as u32;
+
+        let egui = EguiRenderer::new(
+            &device,       // wgpu Device
+            config.format, // TextureFormat
+            None,          // this can be None
+            1,             // samples
+            window,        // winit Window
+        );
 
         Self {
             surface,
@@ -314,7 +335,9 @@ impl<'a> State<'a> {
             camera_buffer,
             camera_bind_group,
             camera_uniform,
+            world,
             window,
+            egui,
         }
     }
 
@@ -340,7 +363,7 @@ impl<'a> State<'a> {
         self.camera_controller.process_events(event)
     }
 
-    pub fn update_verts(&mut self, verts: &[Vertex], indices: &[u16]) {
+    pub fn update_verts(&mut self, verts: &[Vertex], indices: &[u32]) {
         self.queue
             .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(verts));
 
@@ -357,6 +380,11 @@ impl<'a> State<'a> {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+        if self.world.height_map.dirty_points {
+            let (verts, indices) = self.world.update_geometry();
+            self.update_verts(&verts, &indices);
+            self.world.height_map.dirty_points = false;
+        }
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -403,13 +431,78 @@ impl<'a> State<'a> {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
+
+        //// Now draw egui
+        let screen_descriptor = ScreenDescriptor {
+            size_in_pixels: [self.config.width, self.config.height],
+            pixels_per_point: self.window().scale_factor() as f32,
+        };
+
+        self.egui_draw(&mut encoder, &view, screen_descriptor);
 
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
 
         Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn egui_draw(
+        &mut self,
+        encoder: &mut CommandEncoder,
+        window_surface_view: &TextureView,
+        screen_descriptor: ScreenDescriptor,
+        //run_ui: impl FnOnce(&Context),
+    ) {
+        // self.state.set_pixels_per_point(window.scale_factor() as f32);
+        let raw_input = self.egui.egui_state.take_egui_input(self.window);
+        let full_output = self.egui.context.run(raw_input, |_ui| {
+            self.world.height_map.gui(&self.egui.context);
+        });
+
+        self.egui
+            .egui_state
+            .handle_platform_output(self.window, full_output.platform_output);
+
+        let tris = self
+            .egui
+            .context
+            .tessellate(full_output.shapes, full_output.pixels_per_point);
+        for (id, image_delta) in &full_output.textures_delta.set {
+            self.egui
+                .renderer
+                .update_texture(&self.device, &self.queue, *id, image_delta);
+        }
+        self.egui.renderer.update_buffers(
+            &self.device,
+            &self.queue,
+            encoder,
+            &tris,
+            &screen_descriptor,
+        );
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: window_surface_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            label: Some("egui main render pass"),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        self.egui
+            .renderer
+            .render(&mut rpass, &tris, &screen_descriptor);
+        drop(rpass);
+        for x in &full_output.textures_delta.free {
+            self.egui.renderer.free_texture(x)
+        }
     }
 }

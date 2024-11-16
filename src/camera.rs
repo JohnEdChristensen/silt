@@ -1,4 +1,4 @@
-use winit::{
+use egui_winit::winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };

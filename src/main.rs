@@ -1,10 +1,11 @@
-use silt::{world::World, State};
-use winit::{
+use egui_wgpu::wgpu;
+use egui_winit::winit::{
     event::*,
     event_loop::EventLoop,
     keyboard::{KeyCode, PhysicalKey},
     window::WindowBuilder,
 };
+use silt::{world::World, WgpuState};
 fn main() {
     pollster::block_on(run());
 }
@@ -67,17 +68,11 @@ async fn run() {
     //        .expect("Couldn't append canvas to document body.");
     //}
 
-    // State::new uses async code, so we're going to wait for it to finish
-    let mut state = State::new(&window).await;
-
     let world = World::default();
-    let (hv, hi) = world.height_map.create_triangles();
-    let (gv, gi) = world.ground_plane.create_triangles();
-    let gi_offset = gi.iter().map(|i| i + hi.len() as u16).collect();
-    let verts = [hv, gv].concat();
-    let indices = [hi, gi_offset].concat();
 
-    state.update_verts(&verts, &indices);
+    // State::new uses async code, so we're going to wait for it to finish
+    let mut state = WgpuState::new(&window, world).await;
+
     let mut surface_configured = false;
 
     event_loop
@@ -132,6 +127,9 @@ async fn run() {
                             }
                             _ => {}
                         }
+
+                        //// Pass event to egui
+                        state.egui.handle_input(state.window, event);
                     }
                 }
                 _ => {}
